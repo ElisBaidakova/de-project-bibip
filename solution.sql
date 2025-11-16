@@ -63,7 +63,7 @@ country_id smallint references car_shop.countries
 create table car_shop.auto_names(
 name_id SERIAL primary key,    /*первичный ключ с автоинкрементом*/
 auto_name varchar unique not null,    /*название автомобиля может состоять из букв или цифр и может быть разной длины*/
-brand_id smallint not null references car_shop.auto_brands,
+brand_id smallint references car_shop.auto_brands,
 gas_type numeric(4, 1)  /*выбрано методом исключения: тип integer не подходит для дробных чисел. В этом значении не более одного знака после запятой*/
 );
 create table car_shop.colors(
@@ -83,9 +83,7 @@ from raw_data.sales_2nf_new;
 insert into car_shop.auto_brands(brand_name, country_id)
 select distinct brand, country_id
 from raw_data.sales_2nf_new
-join car_shop.countries on sales_2nf_new.origin_country = countries.country;
-
-alter table car_shop.auto_names alter column brand_id drop not null;
+left join car_shop.countries on sales_2nf_new.origin_country = countries.country;
 
 insert into car_shop.auto_names(auto_name, gas_type, brand_id)
 select distinct auto_name, gas_type, brand_id
@@ -99,14 +97,6 @@ from raw_data.sales_2nf;
 insert into car_shop.customers(customer_name, phone)
 select distinct customer_name, phone
 from raw_data.sales_2nf;
-
-create table car_shop.car_and_color(    /*таблица для связи многие ко многим цветов и автомобилей*/
-name_id int,    /*тип поля id - целое число*/
-color_id int,    /*тип поля id - целое число*/
-foreign key (name_id) references car_shop.auto_names(name_id),
-foreign key (color_id) references car_shop.colors(color_id),
-primary key (name_id, color_id)
-);
 
 create table car_shop.auto_sales_new(
 id SERIAL primary key,    /*первичный ключ с автоинкрементом*/
@@ -126,6 +116,9 @@ join car_shop.auto_brands on auto_brands.brand_name = sales_2nf_new.brand
 join car_shop.auto_names on auto_names.auto_name = sales_2nf_new.auto_name
 join car_shop.colors on colors.color = sales_2nf_new.color
 join car_shop.customers on sales_2nf_new.customer_name = customers.customer_name;
+
+select COUNT (*) from car_shop.auto_sales_new;
+select COUNT(*) from raw_data.sales;
 
   /*задание 1*/
 select count(
