@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from decimal import Decimal
 from enum import StrEnum
 
