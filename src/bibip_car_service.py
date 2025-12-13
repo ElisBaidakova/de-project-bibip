@@ -2,9 +2,15 @@ from models import Car, CarFullInfo, CarStatus, Model, ModelSaleStats, Sale
 from pathlib import Path
 import os
 from collections import defaultdict
+from typing import Dict, Any
 
 
 class CarService:
+
+    # Ширина полей для выравнивания в текстовых файлах
+    BRAND_WIDTH = 500
+    STATUS_WIDTH = 500
+
     def __init__(self, root_directory_path: str) -> None:
         self.root_directory_path = root_directory_path
 
@@ -23,123 +29,169 @@ class CarService:
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_model(self, model: Model) -> Model:
+        # Формируем строку: сначала данные, потом дополняем бренд пробелами
+        brand_padded = model.brand.ljust(self.BRAND_WIDTH)
+        line = f"{model.id}, {model.name}, {brand_padded}\n"
+
         with open(self.model_path, mode='a', encoding='utf-8') as file_model, \
-            open(self.index_model, mode='a', encoding='utf-8') as file_index_model:
-            file_model.write(f'{model.id}, {model.name}, {model.brand.ljust(500)}\n')
+             open(self.index_model, mode='a', encoding='utf-8') as file_index_model:
+            file_model.write(line)
             self.count_index_model += 1
-            file_index_model.write(f'{model.name}, {self.count_index_model}\n')
+            file_index_model.write(f"{model.name}, {self.count_index_model}\n")
         return model
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_car(self, car: Car) -> Car:
-        with open(self.car_path, 'a', encoding='utf-8') as file_cars, \
-            open(self.index_car, 'a', encoding='utf-8') as file_index_cars:
-            file_cars.write(f'{car.vin}, {car.model}, {car.price}, {car.date_start}, {car.status.ljust(500)}\n')
+        # Формируем строку: сначала данные, потом дополняем статус пробелами
+        status_padded = car.status.value.ljust(self.STATUS_WIDTH)
+        line = f"{car.vin}, {car.model}, {car.price}, {car.date_start}, {status_padded}\n"
+
+        with open(self.car_path, mode='a', encoding='utf-8') as file_cars, \
+             open(self.index_car, mode='a', encoding='utf-8') as file_index_cars:
+            file_cars.write(line)
             self.count_index_car += 1
-            file_index_cars.write(f'{car.vin}, {self.count_index_car}\n')
+            file_index_cars.write(f"{car.vin}, {self.count_index_car}\n")
         return car
 
     # Задание 2. Сохранение продаж.
-    def sell_car(self, sale: Sale) -> Car:
-        with open(self.sale_path, mode='a', encoding='utf-8') as file_sale, \
-            open(self.index_sale, mode='a', encoding='utf-8') as file_index_sale:
-            # Записываем продажу в два файла
-            file_sale.write(f'{sale.sales_number}, {sale.car_vin}, {sale.cost}, {sale.sales_date.ljust(500)}\n')
-            self.count_index_sale += 1
-            file_index_sale.write(f'{sale.sales_number}, {self.count_index_sale}\n')
-        return car
-
-    def find_car_by_vin(self, vin: str) -> Car | None:
-        with open(self.index_car, 'r', encoding='utf-8') as file_index_cars:
-            for line in file_index_cars:    # Ищем строку в индексе по vin коду
+    def sell_car(self, sale: Sale) -> Car | None:
+        car_line_number = None
+        # Ищем автомобиль по VIN
+        with open(self.index_car, 'r', encoding='utf-8') as f_index:
+            for line in f_index:
                 parts = line.strip().split(', ')
-                if len(parts) != 2:
-                    continue
-                indexed_vin, line_num_str = parts
-                if indexed_vin == vin:
-                    line_number = int(line_num_str) - 1  # Индексация в файле
-                    break
-                else:
-                    return None  # VIN не найден
-        # Читаем строку из файла cars.txt   
-        with open(self.car_path, 'r', encoding='utf-8') as file_cars:
-            lines = file_cars.readlines()
-            if not (0 <= line_number < len(lines)):
-                return None
-            data = lines[line_number].strip().split(', ')
-            if len(data) < 5:
-                return None
+                if len(parts) == 2 and parts[0] == sale.car_vin:
+                    car_line_number = int(parts[1]) - 1
+        if car_line_number is None:
+            return None  # Автомобиль не найден
 
-            car_vin = data[0]
-            model = data[1]
-            price = float(data[2])
-            date_start = data[3]
-            raw_status = data[4].strip()    # Убираем лишние пробелы
-            status = CarStatus(raw_status)
-            # Создание и возврат объекта Car
-            return Car(
-                vin=car_vin,
-                model=model,
-                price=price,
-                date_start=date_start,
-                status=status
-            )
+        car_data = None
+        with open(self.car_path, 'r', encoding='utf-8') as f_cars:
+            lines = f_cars.readlines()    # Читаем данные автомобиля
+            if not (0 <= car_line_number < len(lines)):
+                return None
+        parts = lines[car_line_number].strip().split(', ')
+        if len(parts) < 5:
+            return None
+
+        vin = parts[0]
+        model = parts[1]
+        price = float(parts[2])
+        date_start = parts[3]
+        car_data = (vin, model, price, date_start)
+
+        # Обновляем статус автомобиля
+        vin, model, price, date_start = car_data
+        new_status_str = CarStatus.sold.value.ljust(self.STATUS_WIDTH)
+        updated_line = f"{vin}, {model}, {price}, {date_start}, {new_status_str}\n"
+
+        with open(self.car_path, 'r', encoding='utf-8') as f_cars:
+            all_lines = f_cars.readlines()
+        all_lines[car_line_number] = updated_line
+        with open(self.car_path, 'w', encoding='utf-8') as f_cars:
+            f_cars.writelines(all_lines)
+
+        if isinstance(sale.sales_date, str):
+            sales_date_str = sale.sales_date
+        else:
+            sales_date_str = str(sale.sales_date)    # Приведение к строке
+
+        sales_date_padded = sales_date_str.ljust(self.STATUS_WIDTH)
+        sale_line = f"{sale.sales_number}, {sale.car_vin}, {sale.cost}, {sales_date_padded}\n"
+
+        with open(self.sale_path, 'a', encoding='utf-8') as f_sale, \
+             open(self.index_sale, 'a', encoding='utf-8') as f_index_sale:
+            f_sale.write(sale_line)
+            self.count_index_sale += 1
+            f_index_sale.write(f"{sale.sales_number}, {self.count_index_sale}\n")
+        # Возвращаем объект Car с обновлённым статусом
+        return Car(
+            vin=vin,
+            model=model,
+            price=price,
+            date_start=date_start,
+            status=CarStatus.sold
+        )
 
     # Задание 3. Доступные к продаже
     def get_cars(self, status: CarStatus) -> list[Car]:
-        with open(self.car_path, 'r', encoding='utf-8'):    # Читаем файл
-            cars_available = list()    # Создаём список доступных авто
-            if status == 'available':    # Если статус: доступен
-                # Добавляем авто в список
-                cars_available.append(self.car_path)
-            cars_available.sort    # Сортируем список
-        return cars_available
+        cars = []
+        with open(self.car_path, 'r', encoding='utf-8') as file_cars:
+            for line in file_cars:
+                line = line.strip()
+                if not line:
+                    continue    # пропускаем пустые строки
+                parts = line.split(', ')
+                if len(parts) < 5:
+                    continue    # некорректная строка
+                vin = parts[0]    # Извлекаем данные
+                model = parts[1]
+                price = float(parts[2])
+                date_start = parts[3]
+                raw_status = parts[4].strip()
+            car_status = CarStatus(raw_status)    # Сравниваем статус
+            if car_status == status:
+                cars.append(Car(
+                    vin=vin,
+                    model=model,
+                    price=price,
+                    date_start=date_start,
+                    status=car_status
+                ))
+        cars.sort(key=lambda car: car.vin)    # Сортируем по VIN
+        return cars
 
     # Задание 4. Детальная информация
-    def get_car_info(self, line_number: int) -> CarFullInfo | None:
-        with open(self.car_path, 'r', encoding='utf-8') as f_cars:
-            car_lines = f_cars.readlines()    # Ищем авто по номеру строки
-            if line_number < 0 or line_number >= len(car_lines):
-                return None
-            car_parts = car_lines[line_number].strip().split(', ')
-            if len(car_parts) < 5:
-                return None
-            vin = car_parts[0]
-            model_id = car_parts[1]
-            price = float(car_parts[2])
-            date_start = car_parts[3]
-            status = CarStatus(car_parts[4].strip())
+    def get_car_info(self, vin: str) -> CarFullInfo | None:
+        with open(self.index_car, 'r', encoding='utf-8') as f_index:
+            for line in f_index:    # Ищем автомобиль по VIN
+                parts = line.strip().split(', ')
+                if len(parts) == 2 and parts[0] == vin:
+                    line_number = int(parts[1]) - 1
+                else:
+                    return None  # VIN не найден в индексе
 
-        # Ищем модель по model_id в models.txt
-        model_name = None
+        with open(self.car_path, 'r', encoding='utf-8') as f_cars:
+            car_lines = f_cars.readlines()    # Читаем строку автомобиля
+        if not (0 <= line_number < len(car_lines)):
+            return None
+        car_parts = car_lines[line_number].strip().split(', ')
+        if len(car_parts) < 5:
+            return None
+
+        vin = car_parts[0]
+        model_id = car_parts[1]
+        price = float(car_parts[2])
+        date_start = car_parts[3]
+        status = CarStatus(car_parts[4].strip())
+
+        model_name = None    # Ищем модель по model_id
         brand = None
         with open(self.model_path, 'r', encoding='utf-8') as f_models:
             for line in f_models:
                 parts = line.strip().split(', ')
-                if len(parts) < 3:
-                    continue
-                mid, name, padded_brand = parts[0], parts[1], parts[2]
-                if mid == model_id:
-                    model_name = name
-                    brand = padded_brand.strip()  # убираем ljust(500)
-                    break
-    # Ищем продажу по VIN в sales.txt
-        sales_date = None
+                if len(parts) >= 3:
+                    mid, name, padded_brand = parts[0], parts[1], parts[2]
+                    if mid == model_id:
+                        model_name = name
+                        brand = padded_brand.strip()
+
+        sales_number = None    # Ищем продажу по VIN
         sales_cost = None
-        sales_number = None
+        sales_date = None
         with open(self.sale_path, 'r', encoding='utf-8') as f_sales:
             for line in f_sales:
                 parts = line.strip().split(', ')
-                if len(parts) < 4:
-                    s_number, s_vin, cost, padded_date = parts
-                if s_vin == vin:
-                    sales_number = s_number
-                    sales_cost = float(cost)
-                    sales_date = padded_date.strip()
-
-        return CarFullInfo(    # Создать и вернуть CarFullInfo
+                if len(parts) >= 4:  # ← ИСПРАВЛЕНО: должно быть >= 4
+                    s_number, s_vin, cost, padded_date = parts[0], parts[1], parts[2], parts[3]
+                    if s_vin == vin:
+                        sales_number = s_number
+                        sales_cost = float(cost)
+                        sales_date = padded_date.strip()
+        # Создаём и возвращаем CarFullInfo
+        return CarFullInfo(
             vin=vin,
-            model=Model(id=model_id, name=model_name, brand=brand),
+            model=Model(id=model_id, name=model_name or "", brand=brand or ""),
             price=price,
             date_start=date_start,
             status=status,
@@ -205,7 +257,8 @@ class CarService:
             if len(parts) >= 2 and parts[0] == sales_number:
                 car_vin = parts[1]    # Получаем VIN автомобиля
                 sale_line_index = i
-        if car_vin is None:
+
+        if car_vin is None or sale_line_index is None:
             return None  # Продажа не найдена
 
         del sale_lines[sale_line_index]    # Удаляем запись о продаже
@@ -228,7 +281,7 @@ class CarService:
         parts = car_lines[car_line_number].strip().split(', ')
         if len(parts) < 5:
             return None
-        parts[4] = CarStatus.AVAILABLE.value.ljust(500)    # Обновляем статус
+        parts[4] = CarStatus.available.value.ljust(500)    # Обновляем статус
         car_lines[car_line_number] = ', '.join(parts) + '\n'
 
         with open(self.car_path, 'w', encoding='utf-8') as f_cars:
@@ -239,12 +292,13 @@ class CarService:
             model=parts[1],
             price=float(parts[2]),
             date_start=parts[3],
-            status=CarStatus.AVAILABLE
+            status=CarStatus.available
         )
 
     # Задание 7. Самые продаваемые модели
     def top_models_by_sales(self) -> list[ModelSaleStats]:
-        sales_records = []    # Считываем все продажи
+        sales_records: list[tuple[str, float]] = []
+        # Считываем все продажи: (vin, cost)
         with open(self.sale_path, 'r', encoding='utf-8') as f_sales:
             for line in f_sales:
                 parts = line.strip().split(', ')
@@ -252,24 +306,37 @@ class CarService:
                     vin = parts[1]
                     cost = float(parts[2])
                     sales_records.append((vin, cost))
-        # Агрегируем данные по model_id
-        model_data = defaultdict(lambda: {'count': 0, 'total_cost': 0.0})
-        for vin, cost in sales_records:
-            model_id = model_data.get(vin)
-            if model_id is None:
-                continue
-            model_data[model_id]['count'] += 1
-            model_data[model_id]['total_cost'] += cost
+                if not sales_records:
+                    return []
 
-    # Сортируем по количеству продаж и по убыванию цены продажи
-        def sort_key(item):
+        vin_to_model: dict[str, str] = {}
+        with open(self.car_path, 'r', encoding='utf-8') as f_cars:
+            for line in f_cars:
+                parts = line.strip().split(', ')
+                if len(parts) >= 2:
+                    vin = parts[0]
+                    model_id = parts[1]
+                    vin_to_model[vin] = model_id
+
+        # Агрегируем данные по model_id
+        model_data: Dict[str, Dict[str, Any]] = defaultdict(lambda: {'count': 0, 'total_cost': 0.0})
+        for vin, cost in sales_records:
+            if vin in vin_to_model:
+                model_id = vin_to_model[vin]  # тип: str
+                model_data[model_id]['count'] += 1
+                model_data[model_id]['total_cost'] += cost
+
+        # Сортируем по количеству продаж и по средней цене
+        def sort_key(item: tuple[str, dict[str, Any]]) -> tuple[int, float]:
             model_id, stats = item
             count = stats['count']
             avg_cost = stats['total_cost'] / stats['count']
-            return (-count, -avg_cost)  # минус для сортировки по убыванию
+            return (-count, -avg_cost)
+
         sorted_models = sorted(model_data.items(), key=sort_key)
 
-        result = []    # Возвращаем топ-3
+        # Возвращаем топ-3
+        result: list[ModelSaleStats] = []
         for model_id, stats in sorted_models[:3]:
             result.append(ModelSaleStats(
                 model_id=model_id,
