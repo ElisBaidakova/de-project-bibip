@@ -29,7 +29,7 @@ class CarService:
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_model(self, model: Model) -> Model:
-        # Формируем строку: сначала данные, потом дополняем бренд пробелами
+        # Формируем строку: сначала данные, потом дополняем пробелами
         brand_padded = model.brand.ljust(self.BRAND_WIDTH)
         line = f"{model.id}, {model.name}, {brand_padded}\n"
 
@@ -42,7 +42,7 @@ class CarService:
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_car(self, car: Car) -> Car:
-        # Формируем строку: сначала данные, потом дополняем статус пробелами
+        # Формируем строку: сначала данные, потом дополняем пробелами
         status_padded = car.status.value.ljust(self.STATUS_WIDTH)
         line = f"{car.vin}, {car.model}, {car.price}, {car.date_start}, {status_padded}\n"
 
@@ -117,7 +117,8 @@ class CarService:
     def get_cars(self, status: CarStatus) -> list[Car]:
         cars = []
         with open(self.car_path, 'r', encoding='utf-8') as file_cars:
-            for line in file_cars:
+            lines = file_cars.readlines()    # Читаем все строки
+            for line in lines:
                 line = line.strip()
                 if not line:
                     continue    # пропускаем пустые строки
@@ -129,16 +130,15 @@ class CarService:
                 price = float(parts[2])
                 date_start = parts[3]
                 raw_status = parts[4].strip()
-            car_status = CarStatus(raw_status)    # Сравниваем статус
-            if car_status == status:
-                cars.append(Car(
-                    vin=vin,
-                    model=model,
-                    price=price,
-                    date_start=date_start,
-                    status=car_status
-                ))
-        cars.sort(key=lambda car: car.vin)    # Сортируем по VIN
+                car_status = CarStatus(raw_status)    # Сравниваем статус
+                if car_status == status:
+                    cars.append(Car(
+                        vin=vin,
+                        model=model,
+                        price=price,
+                        date_start=date_start,
+                        status=car_status
+                    ))
         return cars
 
     # Задание 4. Детальная информация
@@ -148,8 +148,8 @@ class CarService:
                 parts = line.strip().split(', ')
                 if len(parts) == 2 and parts[0] == vin:
                     line_number = int(parts[1]) - 1
-                else:
-                    return None  # VIN не найден в индексе
+        if line_number is None:
+            return None  # VIN не найден
 
         with open(self.car_path, 'r', encoding='utf-8') as f_cars:
             car_lines = f_cars.readlines()    # Читаем строку автомобиля
@@ -182,7 +182,7 @@ class CarService:
         with open(self.sale_path, 'r', encoding='utf-8') as f_sales:
             for line in f_sales:
                 parts = line.strip().split(', ')
-                if len(parts) >= 4:  # ← ИСПРАВЛЕНО: должно быть >= 4
+                if len(parts) >= 4:
                     s_number, s_vin, cost, padded_date = parts[0], parts[1], parts[2], parts[3]
                     if s_vin == vin:
                         sales_number = s_number
@@ -191,7 +191,8 @@ class CarService:
         # Создаём и возвращаем CarFullInfo
         return CarFullInfo(
             vin=vin,
-            model=Model(id=model_id, name=model_name or "", brand=brand or ""),
+            model=model_name,
+            brand=brand,
             price=price,
             date_start=date_start,
             status=status,
@@ -322,7 +323,7 @@ class CarService:
         model_data: Dict[str, Dict[str, Any]] = defaultdict(lambda: {'count': 0, 'total_cost': 0.0})
         for vin, cost in sales_records:
             if vin in vin_to_model:
-                model_id = vin_to_model[vin]  # тип: str
+                model_id = vin_to_model[vin]
                 model_data[model_id]['count'] += 1
                 model_data[model_id]['total_cost'] += cost
 
