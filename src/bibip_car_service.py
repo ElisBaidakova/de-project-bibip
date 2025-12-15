@@ -23,6 +23,13 @@ class CarService:
         self.sale_path = os.path.join(self.root_directory_path, 'sales.txt')
         self.index_sale = os.path.join(self.root_directory_path, 'sales_index.txt')
 
+        Path(self.model_path).touch(exist_ok=True)
+        Path(self.index_model).touch(exist_ok=True)
+        Path(self.car_path).touch(exist_ok=True)
+        Path(self.index_car).touch(exist_ok=True)
+        Path(self.sale_path).touch(exist_ok=True)
+        Path(self.index_sale).touch(exist_ok=True)
+
         self.count_index_car = 0
         self.count_index_model = 0
         self.count_index_sale = 0
@@ -143,6 +150,7 @@ class CarService:
 
     # Задание 4. Детальная информация
     def get_car_info(self, vin: str) -> CarFullInfo | None:
+        line_number = None
         with open(self.index_car, 'r', encoding='utf-8') as f_index:
             for line in f_index:    # Ищем автомобиль по VIN
                 parts = line.strip().split(', ')
@@ -191,8 +199,8 @@ class CarService:
         # Создаём и возвращаем CarFullInfo
         return CarFullInfo(
             vin=vin,
-            model=model_name,
-            brand=brand,
+            car_model_name=model_name,
+            car_model_brand=brand,
             price=price,
             date_start=date_start,
             status=status,
@@ -319,6 +327,18 @@ class CarService:
                     model_id = parts[1]
                     vin_to_model[vin] = model_id
 
+        # Читаем model_id (brand, name) из models.txt
+        model_id_to_info: dict[str, tuple[str, str]] = {}
+        with open(self.model_path, 'r', encoding='utf-8') as f_models:
+            for line in f_models:
+                parts = line.strip().split(', ', 2)  # разделяем на первые 3 части
+                if len(parts) >= 3:
+                    model_id = parts[0]
+                    name = parts[1]
+                    # brand записан с отступами, убираем лишние пробелы
+                    brand = parts[2].strip()
+                    model_id_to_info[model_id] = (brand, name)
+
         # Агрегируем данные по model_id
         model_data: Dict[str, Dict[str, Any]] = defaultdict(lambda: {'count': 0, 'total_cost': 0.0})
         for vin, cost in sales_records:
@@ -331,7 +351,7 @@ class CarService:
         def sort_key(item: tuple[str, dict[str, Any]]) -> tuple[int, float]:
             model_id, stats = item
             count = stats['count']
-            avg_cost = stats['total_cost'] / stats['count']
+            avg_cost = stats['total_cost'] / count if count > 0 else 0.0
             return (-count, -avg_cost)
 
         sorted_models = sorted(model_data.items(), key=sort_key)
@@ -339,8 +359,11 @@ class CarService:
         # Возвращаем топ-3
         result: list[ModelSaleStats] = []
         for model_id, stats in sorted_models[:3]:
-            result.append(ModelSaleStats(
-                model_id=model_id,
-                count_sales=stats['count']
-            ))
+            if model_id in model_id_to_info:
+                brand, model_name = model_id_to_info[model_id]
+                result.append(ModelSaleStats(
+                    car_model_name=model_name,
+                    brand=brand,
+                    sales_number=stats['count']
+                ))
         return result
